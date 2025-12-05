@@ -22,7 +22,7 @@ mask_token = true
 
 [proxy]
 proxy_enabled = true
-proxy_url = "socks5://warp:1080"
+proxy_url = "http://100.103.140.77:7897"
 
 [generation]
 image_timeout = 300
