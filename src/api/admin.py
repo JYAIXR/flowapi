@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Header
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional, List
+from datetime import datetime, timedelta, timezone
 import secrets
 from ..core.auth import AuthManager
 from ..core.database import Database
@@ -524,6 +525,28 @@ async def get_logs(
     """Get request logs with token email"""
     logs = await db.get_logs(limit=limit)
 
+    # Shanghai timezone (UTC+8)
+    shanghai_tz = timezone(timedelta(hours=8))
+    
+    def convert_to_shanghai(created_at):
+        """Convert UTC timestamp to Shanghai time"""
+        if not created_at:
+            return None
+        try:
+            # Parse UTC time from database
+            if isinstance(created_at, str):
+                dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+            else:
+                dt = created_at
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+            # Convert to Shanghai time
+            return dt.astimezone(shanghai_tz).strftime('%Y/%m/%d %H:%M:%S')
+        except Exception:
+            return created_at
+
     return [{
         "id": log.get("id"),
         "token_id": log.get("token_id"),
@@ -532,7 +555,7 @@ async def get_logs(
         "operation": log.get("operation"),
         "status_code": log.get("status_code"),
         "duration": log.get("duration"),
-        "created_at": log.get("created_at")
+        "created_at": convert_to_shanghai(log.get("created_at"))
     } for log in logs]
 
 
