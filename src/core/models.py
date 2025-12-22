@@ -38,6 +38,10 @@ class Token(BaseModel):
     image_concurrency: int = -1  # -1表示无限制
     video_concurrency: int = -1  # -1表示无限制
 
+    # 429禁用相关
+    ban_reason: Optional[str] = None  # 禁用原因: "429_rate_limit" 或 None
+    banned_at: Optional[datetime] = None  # 禁用时间
+
 
 class Project(BaseModel):
     """Project model for VideoFX"""
@@ -136,6 +140,20 @@ class DebugConfig(BaseModel):
     log_requests: bool = True
     log_responses: bool = True
     mask_token: bool = True
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class CaptchaConfig(BaseModel):
+    """Captcha configuration"""
+    id: int = 1
+    captcha_method: str = "browser"  # yescaptcha 或 browser
+    yescaptcha_api_key: str = ""
+    yescaptcha_base_url: str = "https://api.yescaptcha.com"
+    website_key: str = "6LdsFiUsAAAAAIjVDZcuLhaHiDn5nnHVXVRQGeMV"
+    page_action: str = "FLOW_GENERATION"
+    browser_proxy_enabled: bool = False  # 浏览器打码是否启用代理
+    browser_proxy_url: Optional[str] = None  # 浏览器打码代理URL
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

@@ -66,6 +66,24 @@ async def lifespan(app: FastAPI):
     debug_config = await db.get_debug_config()
     config.set_debug_enabled(debug_config.enabled)
 
+    # Load captcha configuration from database
+    captcha_config = await db.get_captcha_config()
+    config.set_captcha_method(captcha_config.captcha_method)
+    config.set_yescaptcha_api_key(captcha_config.yescaptcha_api_key)
+    config.set_yescaptcha_base_url(captcha_config.yescaptcha_base_url)
+
+    # Initialize browser captcha service if needed
+    browser_service = None
+    if captcha_config.captcha_method == "personal":
+        from .services.browser_captcha_personal import BrowserCaptchaService
+        browser_service = await BrowserCaptchaService.get_instance(db)
+        await browser_service.open_login_window()
+        print("✓ Browser captcha service initialized (webui mode)")
+    elif captcha_config.captcha_method == "browser":
+        from .services.browser_captcha import BrowserCaptchaService
+        browser_service = await BrowserCaptchaService.get_instance(db)
+        print("✓ Browser captcha service initialized (headless mode)")
+
     # Initialize concurrency manager
     tokens = await token_manager.get_all_tokens()
     await concurrency_manager.initialize(tokens)
@@ -73,10 +91,24 @@ async def lifespan(app: FastAPI):
     # Start file cache cleanup task
     await generation_handler.file_cache.start_cleanup_task()
 
+    # Start 429 auto-unban task
+    import asyncio
+    async def auto_unban_task():
+        """定时任务：每小时检查并解禁429被禁用的token"""
+        while True:
+            try:
+                await asyncio.sleep(3600)  # 每小时执行一次
+                await token_manager.auto_unban_429_tokens()
+            except Exception as e:
+                print(f"❌ Auto-unban task error: {e}")
+
+    auto_unban_task_handle = asyncio.create_task(auto_unban_task())
+
     print(f"✓ Database initialized")
     print(f"✓ Total tokens: {len(tokens)}")
     print(f"✓ Cache: {'Enabled' if config.cache_enabled else 'Disabled'} (timeout: {config.cache_timeout}s)")
     print(f"✓ File cache cleanup task started")
+    print(f"✓ 429 auto-unban task started (runs every hour)")
     print(f"✓ Server running on http://{config.server_host}:{config.server_port}")
     print("=" * 60)
 
@@ -86,7 +118,18 @@ async def lifespan(app: FastAPI):
     print("Flow2API Shutting down...")
     # Stop file cache cleanup task
     await generation_handler.file_cache.stop_cleanup_task()
+    # Stop auto-unban task
+    auto_unban_task_handle.cancel()
+    try:
+        await auto_unban_task_handle
+    except asyncio.CancelledError:
+        pass
+    # Close browser if initialized
+    if browser_service:
+        await browser_service.close()
+        print("✓ Browser captcha service closed")
     print("✓ File cache cleanup task stopped")
+    print("✓ 429 auto-unban task stopped")
 
 
 # Initialize components
